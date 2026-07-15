@@ -27,7 +27,8 @@ def main(save_name, encoder, decoder):
 
     devices, accelerator = (-1, "auto") if use_cuda else (1, "cpu")
 
-    model = LitEncoderDecoder.load_from_checkpoint(ckpt, encoder=encoder, decoder=decoder, args=args)
+    model = LitEncoderDecoder.load_from_checkpoint(ckpt, encoder=encoder, decoder=decoder, args=args,
+                                                   weights_only=False)
     datamodule = LitDataModule(args)
 
     trainer = Trainer(accelerator=accelerator, devices=devices)

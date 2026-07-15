@@ -1,0 +1,55 @@
+2026-07-15 — MTP-GO inD training run: results
+==============================================
+
+RUN
+Server: thunderlane@10.162.44.13 (RTX 5090, torch 2.8.0+cu128, GPU shared with
+4 other jobs). Command: python train.py --dataset inD --n-workers 8
+--use-logger true  (all model hyperparameters at paper defaults: 2Xnode =
+SecondOrderNeuralODE motion model, hidden 64, 1 'natt' GNN layer, 8 mixtures,
+rk4, batch 128, lr 1e-4, grad clip 5, 200 epochs, seed 42).
+Data: inD recordings 18-29 (committed default = one intersection location),
+6159 train / 741 val / 920 test samples, preprocessing had 0 NaN skips.
+Duration: 12:22 -> 13:28 CEST (~66 min for 200 epochs, ~20 s/epoch incl. val).
+Training completed cleanly, no crashes, no error signatures in train.log.
+
+RESULTS (most-likely-component metrics, 3 s observation / 5 s horizon)
+Validation (best):  val_nll -1.268 (ep 199, still decreasing)
+                    val_ade  0.994 m (ep 197)   val_fde 2.778 m (ep 197)
+Test (latest ckpt): test_ade 1.006 m   test_fde 2.835 m
+                    test_anll -0.108   test_fnll 3.343   test_apde 0.556
+                    mr 0.424
+Target-vehicle only: test_tv_ade 1.506  test_tv_fde 4.520  tv_mr 0.700
+
+ARTIFACTS
+Remote (thunderlane:~/Cubos_code/mtp-go/):
+  saved_models/inD/SecondOrderNeuralODE64G1InD.ckpt       (latest, epoch 199)
+  saved_models/inD/SecondOrderNeuralODE64G1InD_NLL.ckpt   (best val_nll)
+  saved_models/inD/SecondOrderNeuralODE64G1InD_ADE.ckpt   (best val_ade)
+  logs/SecondOrderNeuralODE64G1InD_15-07_12-22-15/        (CSV + TensorBoard)
+  training_curves_inD.png, preprocess.log, train.log
+Local (this repo):
+  saved_models/inD/*.ckpt                                 (all 3 weights copied)
+  results/training_curves_inD.png                         (loss visualization)
+  results/metrics.csv                                     (full metric history)
+  results/SecondOrderNeuralODE64G1InD.json                (test metrics)
+
+LOSS VISUALIZATION
+python plot_losses.py [--csv results/metrics.csv] --out training_curves.png
+Curves show the objective-scheduling transition at ~epoch 25 (MSE->NLL shift:
+train loss kink + val_nll cliff), smooth convergence afterwards. TensorBoard
+event files also written; view via ssh -L tunnel + tensorboard on 127.0.0.1.
+
+ERRORS ENCOUNTERED (and fixes, all committed)
+- test.py load_from_checkpoint crashed: torch>=2.6 weights_only default
+  rejects argparse.Namespace pickled in ckpt hparams -> pass weights_only=False
+  in test.py (checkpoint is self-produced, trusted).
+
+NOTES / OPEN QUESTIONS
+- Comparison to the published numbers is approximate: this run used the
+  committed-default recording subset (18-29); the paper's exact
+  training subset/splits may differ (splits are seeded per-recording).
+- mode_dist grows to ~430 m then stabilizes - mixture components spread to
+  cover distinct maneuvers; matches the paper's multimodality intent.
+- Weights were NOT pushed to GitHub: origin is upstream westny/mtp-go (no
+  write access). All changes are committed locally; fork + push possible if
+  desired.
