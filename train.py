@@ -7,7 +7,7 @@ from datamodule import *
 from models.gru_gnn import *
 from lightning.pytorch import Trainer, seed_everything
 from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.loggers import WandbLogger, CSVLogger, TensorBoardLogger
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -63,8 +63,8 @@ def main(save_name, encoder, decoder):
     if args.dry_run or not args.use_logger:
         logger = False
     else:
-        run_name = f"{save_name}_{time.strftime('%d-%m_%H:%M:%S')}"
-        logger = WandbLogger(project="mtp-go", name=run_name)
+        run_name = f"{save_name}_{time.strftime('%d-%m_%H-%M-%S')}"
+        logger = [CSVLogger("logs", name=run_name), TensorBoardLogger("logs", name=run_name)]
 
     trainer = Trainer(max_epochs=args.epochs,
                       accelerator=accelerator,

@@ -87,7 +87,7 @@ class TrajectoryPredictionDataset(Dataset):
         self.root = data_set_src
         self.target = target  # planar vs. rotational
         self.version = "sparse-gnn" if (sparse and data_set_src == "highD") else "gnn"
-        self.ids = torch.load(f'data/{self.root}-{self.version}/{self.mode}/ids.pt')
+        self.ids = torch.load(f'data/{self.root}-{self.version}/{self.mode}/ids.pt', weights_only=False)
         self.v_type_onehot = self._create_v_type_onehot(data_set_src)
 
         if small:
@@ -129,17 +129,17 @@ class TrajectoryPredictionDataset(Dataset):
 
         """
         #  Model inputs
-        graph_input = torch.load(f'data/{self.root}-{self.version}/{self.mode}/observation/dat{idx}.pt')
-        nan_mask = torch.load(f'data/{self.root}-{self.version}/{self.mode}/observation/nan_mask{idx}.pt')
+        graph_input = torch.load(f'data/{self.root}-{self.version}/{self.mode}/observation/dat{idx}.pt', weights_only=False)
+        nan_mask = torch.load(f'data/{self.root}-{self.version}/{self.mode}/observation/nan_mask{idx}.pt', weights_only=False)
         graph_input[nan_mask] = 0
-        graph_inp_ei = torch.load(f'data/{self.root}-{self.version}/{self.mode}/observation/edge_idx{idx}.pt')
-        graph_input_ef = torch.load(f'data/{self.root}-{self.version}/{self.mode}/observation/edge_feat{idx}.pt')
+        graph_inp_ei = torch.load(f'data/{self.root}-{self.version}/{self.mode}/observation/edge_idx{idx}.pt', weights_only=False)
+        graph_input_ef = torch.load(f'data/{self.root}-{self.version}/{self.mode}/observation/edge_feat{idx}.pt', weights_only=False)
 
         #  Model targets
-        graph_target = torch.load(f'data/{self.root}-{self.version}/{self.mode}/target/dat{idx}.pt')
-        graph_target_ei = torch.load(f'data/{self.root}-{self.version}/{self.mode}/target/edge_idx{idx}.pt')
-        graph_target_ef = torch.load(f'data/{self.root}-{self.version}/{self.mode}/target/edge_feat{idx}.pt')
-        real_mask = torch.load(f'data/{self.root}-{self.version}/{self.mode}/target/real_mask{idx}.pt')
+        graph_target = torch.load(f'data/{self.root}-{self.version}/{self.mode}/target/dat{idx}.pt', weights_only=False)
+        graph_target_ei = torch.load(f'data/{self.root}-{self.version}/{self.mode}/target/edge_idx{idx}.pt', weights_only=False)
+        graph_target_ef = torch.load(f'data/{self.root}-{self.version}/{self.mode}/target/edge_feat{idx}.pt', weights_only=False)
+        real_mask = torch.load(f'data/{self.root}-{self.version}/{self.mode}/target/real_mask{idx}.pt', weights_only=False)
         graph_target[torch.logical_not(real_mask)] = 0
 
         if self.target == 'planar':
@@ -152,7 +152,7 @@ class TrajectoryPredictionDataset(Dataset):
             graph_target = graph_target[..., [0, 1, 3, 2]]  # x, y, v, psi
 
             #  Static features and targets
-        meta_info = torch.load(f'data/{self.root}-{self.version}/{self.mode}/meta/dat{idx}.pt')
+        meta_info = torch.load(f'data/{self.root}-{self.version}/{self.mode}/meta/dat{idx}.pt', weights_only=False)
         cf = torch.tensor(meta_info.maneuver_id).long()
         dim = torch.tensor((meta_info.length, meta_info.width)).permute(1, 0).float()
         v_type = torch.stack([self.v_type_onehot[v_type] for v_type in meta_info.vehicle_types])

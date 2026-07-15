@@ -1,0 +1,74 @@
+2026-07-15 — MTP-GO replication on inD: environment setup, patches, preprocessing
+==================================================================================
+
+GOAL
+Replicate the MTP-GO model (westny/mtp-go, IEEE T-IV 2023) trained on the inD
+dataset (inD-dataset-v1.1.zip), obtain trained weights, and add loss visualization.
+Code is upstream (westny/mtp-go) — not our repo. Origin cannot be pushed to.
+
+WHAT WAS DONE
+1. Analyzed repo with a 5-agent workflow (preprocess/train/model/compat readers +
+   synthesis). Key facts:
+   - Preprocess reads ../data_sets/inD/data/{XX}_{tracks,tracksMeta,recordingMeta}.csv,
+     writes data/inD-gnn/{training,validation,testing}/... (~10 .pt files/sample).
+   - Committed default processes recordings 18-29 only (one inD location,
+     p0=(47.41, -28.84)); full range 00-32 is commented out at line 360.
+     Kept the committed default = faithful replication of the code as shipped.
+   - train.py defaults reproduce the paper config: motion-model 2Xnode
+     (SecondOrderNeuralODE), hidden 64, 1 GNN layer 'natt', 8 mixtures, rk4,
+     200 epochs, batch 128, lr 1e-4, grad clip 5.
+   - Checkpoints: saved_models/inD/SecondOrderNeuralODE64G1InD{,_NLL,_ADE}.ckpt
+     (latest / best val_nll / best val_ade). Auto-resumes from latest ckpt.
+   - Logged metrics: train_loss (per epoch), val_ade, val_fde, val_nll,
+     val_tv_ade, val_tv_fde, mode_dist.
+
+2. Server: thunderlane@10.162.44.13 (RTX 5090 32GB, driver 595.71, CUDA 13.2,
+   32 cores, 188GB RAM). GPU shared with 4 other python jobs (~6GB VRAM used).
+   "fluttershy" host mentioned by user could not be resolved (no DNS/hosts/ssh
+   config entry anywhere) — proceeded on thunderlane.
+   Env: ~/Cubos_code/mtp-go-venv (python3.10). requirements.txt is UNUSABLE on
+   the 5090 (torch==2.0.0+cu117 has no sm_120 kernels). Installed instead:
+   torch 2.8.0+cu128, torch_geometric 2.8.0 + companion wheels (cu128),
+   lightning 2.6.5, pandas, numpy 2.x, scipy, torchdiffeq, pyarrow, tensorboard,
+   matplotlib, wandb. Verified CUDA matmul on the 5090 works.
+
+3. Patches applied to the code (all committed locally):
+   - inD_preprocess.py:109  np.NaN -> np.nan (removed in NumPy 2.0).
+   - inD_preprocess.py:476  pdb.set_trace() on NaN-in-last-frame -> warn+skip
+     sample (was an interactive debugger landmine for unattended runs).
+   - datamodule.py          all 10 torch.load calls: + weights_only=False
+     (torch>=2.6 flipped the default; meta files pickle a MetaInfo dataclass).
+   - train.py               WandbLogger -> [CSVLogger, TensorBoardLogger] under
+     logs/<run_name>/ (local, no account needed; enables loss visualization).
+   - plot_losses.py (NEW)   renders 2x2 panel figure (train_loss, val_nll,
+     displacement errors, mode_dist) from Lightning CSV logs + prints best
+     metrics. Tested on the server with synthetic data.
+
+4. Dataset: inD-dataset-v1.1.zip (495MB, 33 recordings) -> unzipped to
+   ~/Cubos_code/data_sets/inD/ (sibling of repo, as preprocess expects).
+   Layout verified: data_sets/inD/data/18_tracks.csv exists, 132 files.
+
+5. Preprocessing launched on server (nohup, log: ~/Cubos_code/mtp-go/preprocess.log).
+   Recording 18 took ~1 min; 12 recordings expected ~15-30 min total.
+
+ERRORS ENCOUNTERED
+- rsync with SSH_ASKPASS failed auth (3x permission denied) while plain ssh/scp
+  worked -> switched to tar+scp for transfers.
+- SSH key installation was blocked by permission policy -> stayed with the
+  documented askpass mechanism.
+- setsid without --wait returns before ssh output arrives -> always use
+  setsid --wait.
+
+NEXT STEPS
+- After preprocess: smoke test (python train.py --dataset inD --dry-run true),
+  watch for the known Lightning inference_mode/vmap-jacobian conflict (fix:
+  Trainer(inference_mode=False) if val loop crashes).
+- Full training: python train.py --dataset inD --n-workers 8 --use-logger true
+  (200 epochs, nohup). Monitor via preprocess-style watcher + TensorBoard.
+- After training: run plot_losses.py, scp figure + checkpoints info back,
+  write results info file.
+
+OPEN QUESTIONS
+- fluttershy host address/credentials unknown — training on thunderlane.
+- Whether full-inD (recordings 00-32) reproduction is wanted later; splits
+  change if the recording list changes (np.random.seed(1234) draws per rec).

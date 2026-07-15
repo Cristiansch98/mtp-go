@@ -106,7 +106,7 @@ def get_input_features(df, frame_start, frame_end, trackId=-1):
 
 def get_adjusted_features(df, frame_start, frame_end, n_features, x0=0., y0=0., trackId=-1):
     return_array = np.empty((frame_end - frame_start + 1, n_features))
-    return_array[:] = np.NaN
+    return_array[:] = np.nan
 
     if trackId != -1:
         dfx = df[(df.frame >= frame_start) & (df.frame <= frame_end) & (df.trackId == trackId)]
@@ -473,10 +473,9 @@ if __name__ == "__main__":
                 input_nan_mask = torch.isnan(input_array)
                 target_real_mask = ~torch.isnan(target_array)
 
-                if np.isnan(input_array[:, -1, :]).any():
-                    import pdb
-
-                    pdb.set_trace()
+                if torch.isnan(input_array[:, -1, :]).any():
+                    print(f'Warning: NaN in last observation frame (rec {r_id}) - skipping sample')
+                    continue
 
                 current_id = s_dict[curr_set]['id']
 
