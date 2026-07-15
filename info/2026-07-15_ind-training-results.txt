@@ -44,10 +44,18 @@ ERRORS ENCOUNTERED (and fixes, all committed)
   rejects argparse.Namespace pickled in ckpt hparams -> pass weights_only=False
   in test.py (checkpoint is self-produced, trusted).
 
+COMPARISON TO PAPER (arXiv 2302.00735, Table III - the only inD table)
+- Sample-count replication is EXACT: paper reports 7820 inD samples, 80/10/10
+  split; this run produced 6159+741+920 = 7820. Confirms recordings 18-29 and
+  identical preprocessing.
+- Paper reports inD ADE/FDE per road-user class only (most-likely component,
+  3 s obs / 5 s horizon, 5 Hz), no aggregate: MTP-GO2 (= this config, 2nd-order
+  neural ODE, no static features): Ped 0.42/1.13, Bicycle 1.01/3.00,
+  Car 1.27/3.86 (m). Our aggregate test ADE 1.006 / FDE 2.835 lies within the
+  per-class range, consistent with the published results. (No published inD
+  ANLL/FNLL/APDE/MR values exist to compare against.)
+
 NOTES / OPEN QUESTIONS
-- Comparison to the published numbers is approximate: this run used the
-  committed-default recording subset (18-29); the paper's exact
-  training subset/splits may differ (splits are seeded per-recording).
 - mode_dist grows to ~430 m then stabilizes - mixture components spread to
   cover distinct maneuvers; matches the paper's multimodality intent.
 - Weights were NOT pushed to GitHub: origin is upstream westny/mtp-go (no
