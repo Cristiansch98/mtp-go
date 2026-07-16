@@ -77,9 +77,18 @@ weights in saved_models/inD/SecondOrderNeuralODE64G1DEInD_DYNEDGE*.ckpt.
 Reproduce eval: python test.py --dataset inD --dynamic-edges true
 --add-name _DYNEDGE (flags must match training; DE is in the ckpt name).
 
+MULTI-SEED CONFIRMATION (2026-07-16, seeds 1234/1/42, 3 per variant)
+- test ADE  base 1.013+/-0.034 vs dyn 1.018+/-0.038  -> no effect (noise)
+- test ANLL base -0.095+/-0.018 vs dyn -0.173+/-0.064 -> better, 2/3 seeds
+- best val NLL base -0.61+/-0.59 vs dyn -3.02+/-1.61  -> better in 3/3 seeds
+  (avg -2.4 nats, paired t=-2.5, p~0.13 at n=3)
+CONFIRMED: dynedge = consistent calibration gain, no point-accuracy change.
+Full analysis: reports/2026-07-16_dynedge-multiseed-report.md
+
 NEXT STEPS (open)
-- DYNEDGE + per-step teacher forcing combo; multi-seed runs to tighten the
-  noise bars; per-class (ped/bike/car) eval vs paper Table III.
+- DYNEDGE + per-step teacher forcing combo; presence-agnostic decoder
+  topology via unused full_edge_idx; per-class eval vs paper Table III;
+  5-10 seeds for formal significance.
 
 OPEN QUESTIONS
 - Remaining known leak: future presence topology (which agents exist at
