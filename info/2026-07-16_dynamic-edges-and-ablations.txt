@@ -48,13 +48,38 @@ EXPERIMENTS (all: paper-default config on inD, 200 epochs, single seed)
 - M16       --n-mixtures 16 : test ADE 1.067  FDE 3.023  ANLL -0.005  MR 0.422
   -> Paper's M=8 is locally optimal on inD; "sweep M" critique answered with
      a negative result (single seed caveat).
-- DYNEDGE   --dynamic-edges : running
-- SOLVER_EF --ode-solver ef : running (Euler-forward vs default rk4 ablation;
-  solver options: ef|mp|heun|rk3|ssprk3|rk4|dopri5(rk45)|impl_adam)
+- DYNEDGE   --dynamic-edges : test ADE 1.036  FDE 2.946  ANLL -0.197  MR 0.431
+  -> Clear probabilistic-calibration win: best val NLL -3.63 vs baseline
+     -1.27 (2.4 nats), test ANLL -0.197 vs -0.108; displacement errors
+     unchanged within noise (best val ADE 0.9930 vs 0.9938, FDE identical;
+     test ADE/FDE ~3% worse, single-seed noise range). Training-throughput
+     cost ~25%. Interpretation: evolving inter-agent distances mainly sharpen
+     the predicted covariances/mixture, not the point estimate - consistent
+     with distances feeding the GNN that generates process noise q_t.
+- SOLVER_EF --ode-solver ef : test ADE 1.516  FDE 3.879  ANLL  1.007  MR 0.594
+  -> Euler-forward degrades ADE +51% / FDE +37% vs rk4: the integrator the
+     paper leaves unspecified is a major factor over the 25-step rollout;
+     repo default rk4 validated. (solver options:
+     ef|mp|heun|rk3|ssprk3|rk4|dopri5(rk45)|impl_adam)
 
-NEXT STEPS
-- Evaluate DYNEDGE and SOLVER_EF on test set; comparison table + multi-run
-  loss plot; consider DYNEDGE + per-step TF combo if DYNEDGE helps.
+CONCLUSIONS
+1. Dynamic decoder edges (--dynamic-edges): adopt when NLL/calibration
+   matters; neutral on ADE/FDE. The "frozen graph" gap is real but its cost
+   is in uncertainty quality, not point accuracy (on inD; highway data with
+   faster relative motion may differ).
+2. M=8 mixtures: validated as locally optimal (M4 and M16 both worse).
+3. rk4 vs Euler: the unspecified integrator is a major design choice; Euler
+   collapses accuracy (+51% ADE) and even degrades over training epochs
+   (val ADE rises after ~epoch 50). Keep rk4.
+Artifacts: results/comparison_inD.png (5-run curves), results/*.json (test
+metrics per run), results/runs/*_metrics.csv (full histories), DYNEDGE
+weights in saved_models/inD/SecondOrderNeuralODE64G1DEInD_DYNEDGE*.ckpt.
+Reproduce eval: python test.py --dataset inD --dynamic-edges true
+--add-name _DYNEDGE (flags must match training; DE is in the ckpt name).
+
+NEXT STEPS (open)
+- DYNEDGE + per-step teacher forcing combo; multi-seed runs to tighten the
+  noise bars; per-class (ped/bike/car) eval vs paper Table III.
 
 OPEN QUESTIONS
 - Remaining known leak: future presence topology (which agents exist at
