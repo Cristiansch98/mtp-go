@@ -1,0 +1,32 @@
+2026-07-16 — --full-edges: remove the decoder's ground-truth future-topology leak
+==================================================================================
+
+WHAT WAS DONE
+New flag --full-edges (default False = exact baseline): the decoder's per-step
+graph is a complete graph with self-loops over ALL sample agents, generated in
+TrajectoryPredictionDataset.get() from the node count and substituted into the
+existing tar_edge_index slot. This removes the last future-information leak
+(which agents are present at future timesteps came from ground truth).
+Verified: generated graphs byte-identical to preprocessing's (never previously
+loaded) full_edge_idx files on 100/100 test samples.
+
+Design (after 13-agent adversarial review):
+- Generate instead of loading full_edge_idx files -> no extra disk I/O, no
+  hard dependency on re-preprocessed data dirs (fixes highD --sparse crash),
+  no doubled index traffic (substitution vs second Data attribute).
+- "FE" tag in checkpoint names (train.py/test.py/visualize_predictions.py).
+- Composes with --dynamic-edges (DEFE): distances recomputed from predictions
+  over the full graph = fully deployable decoder, zero future information.
+- Review fixes: FE tag + full_edges threading + first-error reporting in the
+  visualization scripts (were crashing/opaque for FE checkpoints).
+
+EXPERIMENTS (seed 1234, comparable to baseline/DYNEDGE seed-1234 runs)
+- FULL    --full-edges                  : running
+- FULLDYN --full-edges --dynamic-edges  : running (deployable configuration)
+Results will be appended + reports/ updated when evals complete.
+
+OPEN
+- Note: absent agents (left scene) keep receiving/sending messages via their
+  rolled-forward predicted positions; with dynamic edges the Gaussian kernel
+  down-weights them as they drift away, without it they participate at full
+  weight - hypothesis: FULL alone degrades, FULLDYN holds.

@@ -61,7 +61,8 @@ def build_model():
     save_name = type(m_model).__name__
     d_str = args.dataset
     de_str = "DE" if args.dynamic_edges else ""
-    full_save_name = f"{save_name}{args.hidden_size}G{args.n_gnn_layers}{de_str}{d_str[0].upper() + d_str[1:]}{args.add_name}"
+    fe_str = "FE" if args.full_edges else ""
+    full_save_name = f"{save_name}{args.hidden_size}G{args.n_gnn_layers}{de_str}{fe_str}{d_str[0].upper() + d_str[1:]}{args.add_name}"
 
     encoder = GRUGNNEncoder(input_size=n_features, hidden_size=args.hidden_size,
                             n_mixtures=m_model.mixtures, n_layers=args.n_gnn_layers,
@@ -166,17 +167,21 @@ def main():
     device = 'cuda' if (torch.cuda.is_available() and args.use_cuda) else 'cpu'
     model, name = build_model()
     model = model.to(device)
-    dataset = TrajectoryPredictionDataset('testing', args.dataset)
+    dataset = TrajectoryPredictionDataset('testing', args.dataset, full_edges=args.full_edges)
     n = dataset.len()
     print(f'Model {name} on {device}; scoring {n} test scenes...')
 
     scored = []
+    first_err = True
     for i in range(n):
         try:
             s = predict_scene(model, dataset, i, device)
             if s['n_agents'] >= 3 and float(torch.linalg.norm(s['gt'][0, -1] - s['gt'][0, 0])) > 3.0:
                 scored.append((i, s['ade']))
-        except Exception:
+        except Exception as e:
+            if first_err:
+                print(f'scene {i} failed (further failures silent): {type(e).__name__}: {e}')
+                first_err = False
             continue
     scored.sort(key=lambda t: t[1])
     print(f'{len(scored)} candidate scenes (>=3 agents, moving); '

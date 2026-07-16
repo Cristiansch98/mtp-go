@@ -62,6 +62,10 @@ parser.add_argument('--use-edge-features', type=str_to_bool, default=True, const
 parser.add_argument('--dynamic-edges', type=str_to_bool, default=False, const=True,
                     nargs="?", help='If decoder GNN edge weights should be recomputed each step '
                                     'from predicted positions (default: False)')
+parser.add_argument('--full-edges', type=str_to_bool, default=False, const=True,
+                    nargs="?", help='If the decoder should use presence-agnostic complete graphs '
+                                    '(full_edge_idx) instead of ground-truth future topology '
+                                    '(default: False)')
 
 # Program arguments
 parser.add_argument('--dataset', type=str, default='highD',

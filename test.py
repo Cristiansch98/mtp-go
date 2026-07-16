@@ -81,7 +81,8 @@ if __name__ == "__main__":
 
     d_str = args.dataset
     de_str = "DE" if args.dynamic_edges else ""  # keep flag-dependent weights in distinct checkpoints
-    full_save_name = f"{save_name}{args.hidden_size}G{args.n_gnn_layers}{de_str}{d_str[0].upper() + d_str[1:]}{args.add_name}"
+    fe_str = "FE" if args.full_edges else ""
+    full_save_name = f"{save_name}{args.hidden_size}G{args.n_gnn_layers}{de_str}{fe_str}{d_str[0].upper() + d_str[1:]}{args.add_name}"
     print(f'----------------------------------------------------')
     print(f'\nGetting ready to TEST model: {full_save_name} \n')
     print(f'----------------------------------------------------')

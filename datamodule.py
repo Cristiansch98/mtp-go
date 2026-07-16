@@ -26,6 +26,7 @@ class LitDataModule(pl.LightningDataModule):
         self.small_ds = args.small_ds
         self.n_workers = args.n_workers
         self.sparse = args.sparse
+        self.full_edges = getattr(args, 'full_edges', False)
         if args.motion_model in ('singletrack', 'unicycle', 'curvature', 'curvilinear'):
             self.target = 'rotational'
         else:
@@ -36,7 +37,8 @@ class LitDataModule(pl.LightningDataModule):
                                               self.dataset,
                                               small=self.small_ds,
                                               target=self.target,
-                                              sparse=self.sparse)
+                                              sparse=self.sparse,
+                                              full_edges=self.full_edges)
         return DataLoader(dataset,
                           batch_size=self.batch_size,
                           shuffle=True,
@@ -49,7 +51,8 @@ class LitDataModule(pl.LightningDataModule):
                                               self.dataset,
                                               small=self.small_ds,
                                               target=self.target,
-                                              sparse=self.sparse)
+                                              sparse=self.sparse,
+                                              full_edges=self.full_edges)
         return DataLoader(dataset,
                           batch_size=self.batch_size,
                           shuffle=False,
@@ -62,7 +65,8 @@ class LitDataModule(pl.LightningDataModule):
                                               self.dataset,
                                               small=self.small_ds,
                                               target=self.target,
-                                              sparse=self.sparse)
+                                              sparse=self.sparse,
+                                              full_edges=self.full_edges)
         return DataLoader(dataset,
                           batch_size=self.batch_size,
                           shuffle=False,
@@ -80,12 +84,14 @@ class TrajectoryPredictionDataset(Dataset):
                  feature_scaling: bool = False,
                  small: bool = False,
                  target: str = 'planar',
-                 sparse: bool = False):
+                 sparse: bool = False,
+                 full_edges: bool = False):
         super().__init__(None, transform, pre_transform)
         self.mode = train_test
         self.feat_scale = feature_scaling
         self.root = data_set_src
         self.target = target  # planar vs. rotational
+        self.full_edges = full_edges
         self.version = "sparse-gnn" if (sparse and data_set_src == "highD") else "gnn"
         self.ids = torch.load(f'data/{self.root}-{self.version}/{self.mode}/ids.pt', weights_only=False)
         self.v_type_onehot = self._create_v_type_onehot(data_set_src)
@@ -156,6 +162,15 @@ class TrajectoryPredictionDataset(Dataset):
         cf = torch.tensor(meta_info.maneuver_id).long()
         dim = torch.tensor((meta_info.length, meta_info.width)).permute(1, 0).float()
         v_type = torch.stack([self.v_type_onehot[v_type] for v_type in meta_info.vehicle_types])
+
+        if self.full_edges:
+            # Presence-agnostic decoder topology: replace the ground-truth future
+            # graphs with a complete graph (incl. self-loops) over all sample agents,
+            # matching the layout of preprocessing's build_full_seq_edge_idx
+            n = graph_input.shape[0]
+            full_ei = torch.stack((torch.arange(n).repeat_interleave(n),
+                                   torch.arange(n).repeat(n)))
+            graph_target_ei = [full_ei] * len(graph_target_ei)
 
         data = Data(x=graph_input, edge_index=graph_inp_ei, edge_features=graph_input_ef,
                     y=graph_target, tar_edge_index=graph_target_ei, tar_edge_features=graph_target_ef,

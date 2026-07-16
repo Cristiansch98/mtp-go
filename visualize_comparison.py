@@ -24,22 +24,24 @@ SCENES = [(747, 'easy'), (617, 'easy'), (31, 'median'),
           (807, 'median'), (0, 'hard'), (413, 'hard')]
 
 VARIANTS = [
-    ('baseline', dict(dynamic_edges=False, add_name='')),
-    ('dynamic edges', dict(dynamic_edges=True, add_name='_DYNEDGE')),
+    ('baseline', dict(dynamic_edges=False, full_edges=False, add_name='')),
+    ('dynamic edges', dict(dynamic_edges=True, full_edges=False, add_name='_DYNEDGE')),
 ]
 
 
 def main():
     seed_everything(args.seed, workers=True)
     device = 'cuda' if (torch.cuda.is_available() and args.use_cuda) else 'cpu'
-    dataset = TrajectoryPredictionDataset('testing', args.dataset)
 
     models = []
     for label, overrides in VARIANTS:
         args.dynamic_edges = overrides['dynamic_edges']
+        args.full_edges = overrides['full_edges']
         args.add_name = overrides['add_name']
         model, name = build_model()
-        models.append((label, model.to(device)))
+        dataset = TrajectoryPredictionDataset('testing', args.dataset,
+                                              full_edges=args.full_edges)
+        models.append((label, model.to(device), dataset))
         print(f'loaded {label}: {name}')
 
     backgrounds = {}
@@ -56,7 +58,7 @@ def main():
             except Exception:
                 backgrounds[meta.rec_id] = None
         row, col0 = divmod(si, 2)
-        for mi, (mlabel, model) in enumerate(models):
+        for mi, (mlabel, model, dataset) in enumerate(models):
             ax = axes[row][col0 * 2 + mi]
             scene = predict_scene(model, dataset, idx, device)
             plot_scene(ax, scene, meta, backgrounds)
