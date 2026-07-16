@@ -1,0 +1,39 @@
+2026-07-16 — 8-seed statistical support run + honest paper update
+===================================================================
+
+WHAT WAS DONE
+14 new 200-epoch runs on thunderlane (4 parallel streams via seedruns/
+parent.sh, GPU solo at 99% util, ~60 min/run, ~3.8 h wall, zero errors):
+- baseline + dynedge x seeds 7/13/99/2024/3407 -> n=8 paired (with 1234/1/42)
+- full + fulldyn x seeds 1/42 -> n=3 paired
+Analysis: analyze_seeds.py (paired t + exact Wilcoxon + Cohen's d; scipy
+pip-installed into the venv). Output: results/seed_stats.json,
+reports/2026-07-16_8seed-statistics-report.md. Paper rebuilt (still 4 pages).
+
+KEY RESULTS (the honest turn)
+- Calibration effect SHRANK with more seeds: 3-seed estimate -2.41 nats val
+  NLL (3/3 wins) -> 8-seed -1.11 nats (6/8 wins), t=-1.52, p=0.17, d=0.54.
+  Test ANLL -0.044 nats (5/8), p=0.16. NOT significant at n=8; needs ~25-30
+  seeds for 80% power at this effect size. Direction is consistent; variance
+  is huge (baseline val NLL spans -4.91..+0.62 across seeds).
+- Point-accuracy null is now STRONG: paired ADE diff +0.005+/-0.027 m
+  (p=0.62) -> H3 (leak not propping accuracy) is the best-supported claim.
+- Leak-free (n=3): full costs +0.021 m ADE vs baseline; fulldyn improves val
+  NLL (-0.36 -> -0.88, 2/3) but test ANLL identical (-0.085 both): H2
+  directional only.
+- Paper updated everywhere numbers/claims appear (abstract, Table I n=8,
+  Table II mean+/-std, Fig 1b 8 paired seeds, discussion reordered:
+  deployability first, calibration "probable but unproven", power analysis
+  in limitations). Refs font 7.9pt + line-height 1.195 to hold 4 pages.
+
+ERRORS / GOTCHAS
+- Launching remote nohup via ssh kept the ssh session open despite setsid;
+  killed local task, remote streams unaffected. Use `ssh -f` or accept it.
+- Glob "*_BASE_S1*" now matches S13 -> all seed globs need trailing
+  underscore: "*_BASE_S1_*" (fixed in build_paper.py and analyze_seeds.py).
+
+NEXT STEPS / OPEN
+- 25-30 seeds/variant (~30 GPU-h each) if a formally significant calibration
+  claim is wanted; highD run for the H3-on-highways prediction.
+- New weights on thunderlane saved_models/inD/ (not copied locally: 14 ckpts
+  x ~3 files; fetch on demand).

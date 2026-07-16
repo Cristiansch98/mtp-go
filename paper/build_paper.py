@@ -84,13 +84,12 @@ RUNS_A = {  # panel (a): seed-1234 histories
     "full-topo": "SecondOrderNeuralODE64G1FEInD_FULL_*",
     "full+dyn": "SecondOrderNeuralODE64G1DEFEInD_FULLDYN*",
 }
-RUNS_B = {  # panel (b): best val NLL per seed
-    "baseline": {"1234": "SecondOrderNeuralODE64G1InD_15-07*",
-                 "1": "SecondOrderNeuralODE64G1InD_BASE_S1*",
-                 "42": "SecondOrderNeuralODE64G1InD_BASE_S42*"},
-    "dynedge": {"1234": "SecondOrderNeuralODE64G1DEInD_DYNEDGE*",
-                "1": "SecondOrderNeuralODE64G1DEInD_DYN_S1*",
-                "42": "SecondOrderNeuralODE64G1DEInD_DYN_S42*"},
+SEEDS = ["1234", "1", "42", "7", "13", "99", "2024", "3407"]
+RUNS_B = {  # panel (b): best val NLL per seed; trailing _ disambiguates S1/S13
+    "baseline": {s: (f"*_BASE_S{s}_*" if s != "1234"
+                     else "SecondOrderNeuralODE64G1InD_15-07*") for s in SEEDS},
+    "dynedge": {s: (f"*_DYN_S{s}_*" if s != "1234"
+                    else "SecondOrderNeuralODE64G1DEInD_DYNEDGE*") for s in SEEDS},
 }
 
 
@@ -138,20 +137,17 @@ def build_figure(out_path):
                    color="#222222", loc="left", pad=3)
     style_axes(ax_a)
 
-    # (b) best val NLL per seed, paired
-    for si, (seed, _) in enumerate(RUNS_B["baseline"].items()):
+    # (b) best val NLL per seed, paired over all 8 seeds
+    for seed in SEEDS:
         ys = []
-        for xi, variant in enumerate(("baseline", "dynedge")):
+        for variant in ("baseline", "dynedge"):
             _, nll = load_val_nll(RUNS_B[variant][seed])
             ys.append(nll.min())
         ax_b.plot([0, 1], ys, color="#bbbbbb", linewidth=0.9, zorder=1)
         for xi, variant in enumerate(("baseline", "dynedge")):
-            ax_b.plot(xi, ys[xi], "o", ms=5.5, color=COLORS[variant],
+            ax_b.plot(xi, ys[xi], "o", ms=5, color=COLORS[variant],
                       markeredgecolor="white", markeredgewidth=1.0, zorder=2)
-        ax_b.annotate(f"seed {seed}", (0, ys[0]), textcoords="offset points",
-                      xytext=(-6, -2), ha="right", fontsize=6.4,
-                      color="#555555")
-    ax_b.set_xlim(-0.55, 1.35)
+    ax_b.set_xlim(-0.35, 1.35)
     ax_b.set_xticks([0, 1], ["baseline", "dynamic edges"])
     ax_b.set_ylabel("best validation NLL (nats)", fontsize=7.2,
                     color="#222222")
