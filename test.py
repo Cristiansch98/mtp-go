@@ -80,7 +80,8 @@ if __name__ == "__main__":
     save_name = type(m_model).__name__
 
     d_str = args.dataset
-    full_save_name = f"{save_name}{args.hidden_size}G{args.n_gnn_layers}{d_str[0].upper() + d_str[1:]}{args.add_name}"
+    de_str = "DE" if args.dynamic_edges else ""  # keep flag-dependent weights in distinct checkpoints
+    full_save_name = f"{save_name}{args.hidden_size}G{args.n_gnn_layers}{de_str}{d_str[0].upper() + d_str[1:]}{args.add_name}"
     print(f'----------------------------------------------------')
     print(f'\nGetting ready to TEST model: {full_save_name} \n')
     print(f'----------------------------------------------------')
@@ -101,6 +102,7 @@ if __name__ == "__main__":
                             n_heads=args.n_heads,
                             static_f_dim=static_f_dim,
                             gnn_layer=args.gnn_layer,
-                            init_static=args.init_static)
+                            init_static=args.init_static,
+                            dynamic_edges=args.dynamic_edges)
 
     main(full_save_name, encoder, decoder)

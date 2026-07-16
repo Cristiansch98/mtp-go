@@ -1,6 +1,7 @@
 import os.path
 import warnings
 import time
+import argparse
 from argument_parser import args
 from base_mdn import *
 from datamodule import *
@@ -10,6 +11,8 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger, CSVLogger, TensorBoardLogger
 
 torch.multiprocessing.set_sharing_strategy('file_system')
+# Checkpoints store the args Namespace in hparams; needed to auto-resume with torch>=2.6
+torch.serialization.add_safe_globals([argparse.Namespace])
 
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 warnings.filterwarnings("ignore", ".*Checkpoint directory*")
@@ -131,7 +134,8 @@ if __name__ == "__main__":
     save_name = type(m_model).__name__
 
     d_str = args.dataset
-    full_save_name = f"{save_name}{args.hidden_size}G{args.n_gnn_layers}{d_str[0].upper() + d_str[1:]}{args.add_name}"
+    de_str = "DE" if args.dynamic_edges else ""  # keep flag-dependent weights in distinct checkpoints
+    full_save_name = f"{save_name}{args.hidden_size}G{args.n_gnn_layers}{de_str}{d_str[0].upper() + d_str[1:]}{args.add_name}"
     print(f'----------------------------------------------------')
     print(f'\nGetting ready to train model: {full_save_name} \n')
     print(f'----------------------------------------------------')
@@ -153,6 +157,7 @@ if __name__ == "__main__":
                             n_heads=args.n_heads,
                             static_f_dim=static_f_dim,
                             gnn_layer=args.gnn_layer,
-                            init_static=args.init_static)
+                            init_static=args.init_static,
+                            dynamic_edges=args.dynamic_edges)
 
     main(full_save_name, encoder, decoder)

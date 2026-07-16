@@ -1,0 +1,63 @@
+2026-07-16 — Architecture improvements: dynamic decoder edges + ablations
+==========================================================================
+
+GOAL
+Address reviewed caveats of MTP-GO and test improvements against the trained
+inD baseline (test ADE 1.006 / FDE 2.835 / ANLL -0.108 / MR 0.424).
+
+KEY DISCOVERY (from 4-agent code analysis)
+The decoder's graph handling is worse than the "frozen graph" caveat suggests:
+- It uses GROUND-TRUTH FUTURE topology tar_edge_index[di] at every decoder
+  step, in training AND evaluation (future-information leak).
+- It receives NO edge features at all: the decoder GRUGNNCell is built with
+  edge_dim=None and tar_edge_features is dead data (never loaded by any model
+  code). Only the encoder uses distances (via GaussianWeightWrapper kernel
+  exp(-(d/bw)^2), learnable bw init 20 m).
+- Teacher forcing is ALREADY annealed (args.teacher_forcing=0.2 linearly to 0
+  over max_epochs//2, per-sequence Bernoulli) -> "scheduled sampling" from the
+  improvement list is effectively already implemented; dropped as experiment.
+- State feedback is detached (base_mdn.py:96) — no BPTT through the rollout.
+
+CHANGE: --dynamic-edges (default False = exact baseline)
+At each decoder step, inter-agent Euclidean distances are recomputed from the
+pi-weighted (encoder mixture logits, detached softmax) mean of the fed-back
+per-mixture positions past_state[..., :2] and passed as (n_edges,1) edge_attr
+to the decoder GNN cell, now built with edge_dim=1 so the same learnable
+Gaussian kernel as the encoder converts distance -> edge weight.
+Design decisions:
+- Topology kept as tar_edge_index[di] (presence only); the interaction
+  *strength* signal is what changes per step. Graphs are complete over present
+  agents, so structure is carried by distances.
+- Positions from step di-1 by design (causal: all the model knows when
+  predicting di). Using tar_edge_features[di] would leak GT future distances.
+- Gradients: only through GNN weights + kernel bandwidths (positions and
+  mixture weights detached), mirroring the existing detached feedback design.
+- Checkpoint safety: "DE" is encoded in the save/test model name so baseline
+  and dynamic-edges weights can never cross-load (was a review finding; the
+  flag changes the state dict via GaussianWeightWrapper params).
+Code: argument_parser.py (--dynamic-edges), models/gru_gnn.py (decoder cell
+edge_dim + 7-tuple forward), base_mdn.py (per-step distance computation;
+decoder attribute is the single source of truth), train.py/test.py (plumbing
++ DE name tag). Adversarially reviewed (14-agent workflow): 2 correctness
+findings fixed via the DE name tag + source-of-truth change; stale-distance
+finding intentionally not "fixed" (causality, see above).
+
+EXPERIMENTS (all: paper-default config on inD, 200 epochs, single seed)
+- baseline  M=8, rk4        : test ADE 1.006  FDE 2.835  ANLL -0.108  MR 0.424
+- M4        --n-mixtures 4  : test ADE 1.096  FDE 3.073  ANLL  0.130  MR 0.435
+- M16       --n-mixtures 16 : test ADE 1.067  FDE 3.023  ANLL -0.005  MR 0.422
+  -> Paper's M=8 is locally optimal on inD; "sweep M" critique answered with
+     a negative result (single seed caveat).
+- DYNEDGE   --dynamic-edges : running
+- SOLVER_EF --ode-solver ef : running (Euler-forward vs default rk4 ablation;
+  solver options: ef|mp|heun|rk3|ssprk3|rk4|dopri5(rk45)|impl_adam)
+
+NEXT STEPS
+- Evaluate DYNEDGE and SOLVER_EF on test set; comparison table + multi-run
+  loss plot; consider DYNEDGE + per-step TF combo if DYNEDGE helps.
+
+OPEN QUESTIONS
+- Remaining known leak: future presence topology (which agents exist at
+  future steps) still comes from GT even with dynamic edges; fixing needs
+  presence prediction or full_edge_idx (saved by preprocessing, never loaded).
+- Single-seed comparisons; differences < ~0.05 m ADE likely noise.

@@ -59,6 +59,9 @@ parser.add_argument('--n-ode-static', type=str_to_bool, default=False, const=Tru
                     nargs="?", help='If the static features should be used in the neural ODE model')
 parser.add_argument('--use-edge-features', type=str_to_bool, default=True, const=True,
                     nargs="?", help='If GNN-layers should use edge features/weights (default: True)')
+parser.add_argument('--dynamic-edges', type=str_to_bool, default=False, const=True,
+                    nargs="?", help='If decoder GNN edge weights should be recomputed each step '
+                                    'from predicted positions (default: False)')
 
 # Program arguments
 parser.add_argument('--dataset', type=str, default='highD',

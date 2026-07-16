@@ -127,10 +127,11 @@ class GRUGNNEncoder(nn.Module):
 class GRUGNNDecoder(nn.Module):
     def __init__(self, motion_model, max_length=10, hidden_size=64,
                  n_heads=3, n_layers=1, static_f_dim=6, alpha=0.2, dropout=0.1,
-                 gnn_layer="graphconv", init_static=False):
+                 gnn_layer="graphconv", init_static=False, dynamic_edges=False):
         super().__init__()
+        self.dynamic_edges = dynamic_edges
         self.gru_cell = GRUGNNCell(hidden_size, hidden_size, n_heads, n_layers, dropout,
-                                   gnn_layer)
+                                   gnn_layer, edge_dim=1 if dynamic_edges else None)
         self.alpha = alpha
         self.init_static = init_static
         self.static_feature_dim = static_f_dim
@@ -184,7 +185,7 @@ class GRUGNNDecoder(nn.Module):
         return q_t
 
     def forward(self, data):
-        x, hidden, encoder_out, edge_index, past_state, static_features = data
+        x, hidden, encoder_out, edge_index, past_state, static_features, edge_attr = data
         batch_size = x.size(0)
         embedded = self.embedding(x)
         embedded = self.dropout(embedded)
@@ -197,7 +198,7 @@ class GRUGNNDecoder(nn.Module):
         output = torch.cat((embedded, attn_applied[:, 0]), 1)
         output = self.attn_combine(output)
         output = F.leaky_relu(output, self.alpha)
-        hidden = self.gru_cell(output, edge_index, hidden)
+        hidden = self.gru_cell(output, edge_index, hidden, edge_attr)
 
         output = F.elu(self.generator(F.elu(hidden)))
         output = self.dropout(output)

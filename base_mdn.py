@@ -27,6 +27,7 @@ class LitEncoderDecoder(pl.LightningModule):
         self.annealing_epochs = int(self.max_epochs * 0.6)
         self.time_update = self.ekf
         self.initial_uncertainty = 1e-5
+        self.dynamic_edges = getattr(decoder, 'dynamic_edges', False)
 
         self.save_hyperparameters(ignore=['encoder', 'decoder'])
 
@@ -78,12 +79,31 @@ class LitEncoderDecoder(pl.LightningModule):
         dec_static_features = extract_static_features(data, self.motion_model).unsqueeze(1).expand(
             -1, mixtures, -1)  # (B, N_mixtures, 6)
 
+        if self.dynamic_edges:
+            # Mixture weights for position averaging; detached so edge weights
+            # only train the GNN/bandwidth path, mirroring the detached state feedback
+            mix_w = torch.softmax(mixture_coeffs.detach(), dim=-1).unsqueeze(-1)  # (B, M, 1)
+
         # Roll out decoding
         pred_states = []
         Ps = []
         for di in range(target_length):
+            if self.dynamic_edges:
+                # Recompute inter-agent distances from the current fed-back state
+                # (GT under teacher forcing, own prediction otherwise) so decoder
+                # edge weights track the evolving scene instead of a fixed graph.
+                # Positions are from step di-1 by design: they are all the model
+                # knows when predicting step di (using tar_edge_features[di]
+                # would leak ground-truth future distances)
+                ei = tar_edge_index[di]
+                pos = (past_state[..., :2] * mix_w).sum(dim=1)  # (B, 2)
+                dyn_edge_attr = torch.linalg.norm(
+                    pos[ei[0]] - pos[ei[1]], dim=-1, keepdim=True)  # (n_edges, 1) in meters
+            else:
+                dyn_edge_attr = None
+
             dec_in = (decoder_input, decoder_hidden, encoder_output,
-                      tar_edge_index[di], past_state, dec_static_features)
+                      tar_edge_index[di], past_state, dec_static_features, dyn_edge_attr)
             next_states, model_input, q_t, decoder_hidden = self.decoder(dec_in)
 
             #  Update estimated state covariance
