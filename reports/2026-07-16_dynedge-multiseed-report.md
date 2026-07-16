@@ -74,7 +74,29 @@ optimal (M=4: ADE 1.096; M=16: 1.067; both worse than 1.006), and the integrator
 load-bearing — replacing rk4 with Euler-forward degraded ADE by +51% (1.516) with val
 ADE diverging after ~epoch 50. Full curves: `results/comparison_inD.png`.
 
-## 4. Conclusions and recommendations
+## 4. Follow-up: removing the future-topology leak (`--full-edges`)
+
+The remaining leak — ground-truth future *presence* topology — was removed by giving the
+decoder a complete graph over all sample agents (generated from the node count; verified
+byte-identical to preprocessing's unused `full_edge_idx` on 100/100 samples). Single-seed
+(1234) results across the 2×2 design (topology × edge features):
+
+| Variant (decoder inputs) | test ADE | test FDE | test ANLL | best val NLL |
+|---|---|---|---|---|
+| baseline (GT topo, no features) | 1.006 | 2.835 | −0.108 | −1.27 |
+| dynedge (GT topo + dyn. features) | 1.036 | 2.946 | −0.197 | −3.63 |
+| full-topo (complete graph, no features) | 1.048 | 2.968 | −0.089 | −0.67 |
+| **full+dyn (deployable: no future info)** | 1.050 | 2.978 | −0.131 | −1.69 |
+
+Two observations. (1) **The leak was not propping up point accuracy**: removing it costs
+≤0.04 m ADE, at the edge of the ±0.03 seed band — the paper's headline displacement
+metrics are essentially honest despite the leak. full-topo even posts the best val FDE
+(2.756). (2) **Dynamic edge features help in both topology regimes** (val NLL −0.67→−1.69
+full graph; −1.27→−3.63 GT graph), consistent with the phantom-agent hypothesis: with a
+presence-agnostic graph, departed agents keep messaging at full weight unless the
+distance kernel down-weights them, which only the dynamic features provide.
+
+## 5. Conclusions and recommendations
 
 1. **Adopt `--dynamic-edges` when probabilistic quality matters** (planning under
    uncertainty, risk assessment): a consistent, large calibration gain at ≈25% training
@@ -82,9 +104,10 @@ ADE diverging after ~epoch 50. Full curves: `results/comparison_inD.png`.
 2. The "frozen graph" critique is confirmed but nuanced: on inD (low speeds, dense
    interactions) its cost is in uncertainty quality, not displacement. Highway data
    (highD) with ~150 m of travel per horizon may respond differently — untested.
-3. **Remaining leak:** future *presence* topology still comes from ground truth. A fully
-   deployable decoder needs presence-agnostic graphs (e.g. the preprocessed but unused
-   `full_edge_idx`) — the natural next experiment.
+3. **The decoder is deployable without future information** at negligible point-accuracy
+   cost: `--full-edges --dynamic-edges` (Section 4) removes all ground-truth future
+   inputs; pair it with dynamic edge features, which recover most of the calibration
+   lost to presence-agnostic graphs (single-seed; multi-seed confirmation pending).
 4. With n=3 seeds, NLL variance is high (seed 42 is an outlier in both variants); 5–10
    seeds would be needed to claim significance formally.
 

@@ -20,13 +20,19 @@ Design (after 13-agent adversarial review):
 - Review fixes: FE tag + full_edges threading + first-error reporting in the
   visualization scripts (were crashing/opaque for FE checkpoints).
 
-EXPERIMENTS (seed 1234, comparable to baseline/DYNEDGE seed-1234 runs)
-- FULL    --full-edges                  : running
-- FULLDYN --full-edges --dynamic-edges  : running (deployable configuration)
-Results will be appended + reports/ updated when evals complete.
+RESULTS (seed 1234; baseline 1.006/2.835/-0.108 val_nll -1.27,
+         dynedge 1.036/2.946/-0.197 val_nll -3.63)
+- FULL    : test ADE 1.048  FDE 2.968  ANLL -0.089  MR 0.419  val_nll -0.67
+            (best val FDE of all runs: 2.756)
+- FULLDYN : test ADE 1.050  FDE 2.978  ANLL -0.131  MR 0.433  val_nll -1.69
+Conclusions:
+1. Leak removal costs <=0.04 m ADE (edge of +/-0.03 seed band) - the paper's
+   point metrics were essentially honest despite the topology leak.
+2. Calibration pays for the leak fix; dynamic edge features recover most of
+   it (val NLL -0.67 -> -1.69) - phantom-agent hypothesis supported: only
+   the distance kernel can down-weight departed agents in a full graph.
+3. Deployable config = --full-edges --dynamic-edges. Figure:
+   results/comparison_leakfix.png; report section 4 updated.
 
 OPEN
-- Note: absent agents (left scene) keep receiving/sending messages via their
-  rolled-forward predicted positions; with dynamic edges the Gaussian kernel
-  down-weights them as they drift away, without it they participate at full
-  weight - hypothesis: FULL alone degrades, FULLDYN holds.
+- Multi-seed confirmation of FULL/FULLDYN (single seed so far).
