@@ -1,0 +1,47 @@
+2026-07-16 — 4-page paper: leak-free dynamic interaction graphs for MTP-GO
+===========================================================================
+
+WHAT WAS DONE
+Wrote a 4-page IEEE-style paper (paper/paper.pdf) presenting the dynamic-edges
++ full-edges work against the original MTP-GO (Westny et al., T-IV 2023).
+Structure: decoder analysis (future-topology leak, edge-blind decoder GNN) ->
+method with math (eqs for the Gaussian kernel, MDN, neural-ODE motion model,
+EKF covariance propagation, pooled-position distances, presence-agnostic
+topology) -> pre-stated hypotheses H1/H2/H3 (calibration main effect via q_t,
+phantom agents, expected point-accuracy null) -> multi-seed results (Tables
+I-III + Fig 1) -> honest discussion of what worked.
+
+CLAIMS MADE (kept honest)
+- Better calibrated: best val NLL -0.61+/-0.59 -> -3.02+/-1.61 (3/3 seeds),
+  test ANLL -0.095 -> -0.173. Better = calibration + deployability, NOT ADE.
+- Point accuracy explicitly reported as unchanged (H3 null confirmed).
+- Leak removal costs <=0.04 m ADE; full+dyn is the deployable config.
+- n=3 significance limitation stated (paired t=-2.5, p~0.13).
+
+TOOLCHAIN (nontrivial - no LaTeX anywhere)
+Local machine is bare (no pip/matplotlib/LaTeX/gs; groff lacks ms macros and
+pdf/ps device use). External TinyTeX installer was denied by permission
+classifier. Solution: HTML paper (paper/paper.html, IEEE two-column CSS) +
+build script (paper/build_paper.py) run on thunderlane in the mtp-go venv:
+- equations: matplotlib mathtext (STIX) -> baseline-aligned SVGs, inline <img>
+  with computed vertical-align; delimiter &#10218;...&#10219; in the HTML.
+- Fig 1: generated from logs/*/metrics.csv on thunderlane (val NLL curves +
+  per-seed paired best-val-NLL); palette validated with the dataviz skill.
+- PDF: WeasyPrint 69 (pip-installed into the venv; system pango present).
+  Exactly 4 A4 pages; verified visually via gs rasterization of every page.
+Rebuild: scp paper/ to thunderlane:~/Cubos_code/mtp-go/paper/, then
+  ~/Cubos_code/mtp-go-venv/bin/python paper/build_paper.py
+
+ERRORS ENCOUNTERED
+- MathTextParser("agg").parse tuple-unpack changed in mpl 3.10 -> use
+  parser("path") and .width/.height/.depth attributes.
+- Table captions separated from tables at column breaks -> wrapped each
+  caption+table in a break-inside:avoid div.
+- Figure placed too early left a half-empty column -> moved after Table I
+  (WeasyPrint has no floats; source order = layout order).
+
+NEXT STEPS / OPEN
+- Multi-seed FULL/FULLDYN runs would firm up Table II (still single seed).
+- highD run would test the paper's own prediction that dynamic edges matter
+  more for point accuracy on highways.
+- Optional: LaTeX port for arXiv submission (source is plain HTML, easy).

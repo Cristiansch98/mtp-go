@@ -1,0 +1,175 @@
+<div lang="en-US" class="paper">
+<style>
+@page {
+  size: A4;
+  margin: 19mm 16mm 22mm 16mm;
+  @bottom-center { content: counter(page); font-family: "Liberation Serif"; font-size: 8.5pt; color: #333; }
+}
+.paper { font-family: "Liberation Serif", "DejaVu Serif", serif; font-size: 9.3pt; line-height: 1.23; color: #000; }
+.tabwrap { break-inside: avoid; }
+.titleblock { text-align: center; margin-bottom: 5mm; }
+.titleblock h1 { font-size: 16.5pt; font-weight: normal; margin: 0 12mm 3.5mm 12mm; line-height: 1.25; }
+.titleblock .authors { font-size: 10.5pt; margin-bottom: 1mm; }
+.titleblock .affil { font-size: 9pt; font-style: italic; }
+.cols { columns: 2; column-gap: 5.5mm; text-align: justify; }
+.cols p { margin: 0 0 1mm 0; text-indent: 3.5mm; }
+p.noindent { text-indent: 0; }
+.abstract { font-weight: bold; font-size: 8.8pt; margin-bottom: 2mm; text-align: justify; }
+.abstract .lead { font-style: italic; }
+.kw { font-weight: bold; font-style: italic; font-size: 8.8pt; margin-bottom: 3mm; text-align: justify; }
+h2 { font-size: 9.6pt; font-weight: normal; font-variant: small-caps; text-align: center; margin: 3.2mm 0 1.6mm 0; break-after: avoid; }
+h3 { font-size: 9.3pt; font-weight: normal; font-style: italic; margin: 2.2mm 0 1.2mm 0; break-after: avoid; }
+.eq { display: flex; align-items: center; margin: 1.6mm 0; break-inside: avoid; text-indent: 0; }
+.eq .m { flex: 1; text-align: center; }
+.eq .n { flex: 0 0 auto; }
+table { width: 100%; border-collapse: collapse; font-size: 7.9pt; margin: 1.5mm 0 2.5mm 0; }
+th, td { padding: 0.7mm 1mm; text-align: center; }
+thead tr:first-child th { border-top: 1pt solid #000; }
+thead tr:last-child th { border-bottom: 0.5pt solid #000; }
+tbody tr:last-child td { border-bottom: 1pt solid #000; }
+td.l, th.l { text-align: left; }
+.tabcap, .figcap { font-size: 8.2pt; text-align: justify; text-indent: 0; margin: 1mm 0 1.5mm 0; }
+.tabcap .t, .figcap .t { font-variant: small-caps; }
+.figure { break-inside: avoid; margin: 1.5mm 0 2mm 0; text-indent: 0; }
+.figure img { width: 100%; }
+.refs { font-size: 8.2pt; }
+.refs p { text-indent: 0; margin-bottom: 0.8mm; padding-left: 4.5mm; text-indent: -4.5mm; }
+.mi { }
+b.run { font-variant: small-caps; font-weight: normal; }
+</style>
+
+<div class="titleblock">
+<h1>Leak-Free Dynamic Interaction Graphs Improve the Probabilistic Calibration of Graph-Based Multi-Agent Trajectory Prediction</h1>
+<div class="authors">Cristian Cubides</div>
+<div class="affil">Research note on MTP-GO (Westny et&#8201;al., IEEE T-IV 2023) &#8212; code: github.com/Cristiansch98/mtp-go</div>
+</div>
+
+<div class="cols">
+
+<p class="abstract noindent"><span class="lead">Abstract</span>&#8212;MTP-GO combines a graph-neural-network encoder&#8211;decoder with neural-ODE motion models and is a strong baseline for probabilistic multi-agent trajectory prediction. We present a code-level analysis of its decoder and identify two structural weaknesses: (i)&#160;at every rollout step the decoder consumes the <i>ground-truth future</i> interaction topology, during training <i>and</i> evaluation, and (ii)&#160;the decoder GNN receives <i>no edge features at all</i>&#8212;inter-agent distances inform only the encoder. We propose two minimal, deployable modifications: <i>dynamic decoder edges</i>, which re-derive inter-agent distances at each step from the model&#8217;s own fed-back predictions and inject them through the same learnable Gaussian kernel used by the encoder, and a <i>presence-agnostic full topology</i> that removes the last ground-truth future input. We hypothesize, from the model&#8217;s covariance-propagation structure, that the change should primarily improve uncertainty calibration rather than point accuracy. Multi-seed experiments on the inD dataset confirm this: best validation NLL improves from &#8722;0.61&#160;&#177;&#160;0.59 to &#8722;3.02&#160;&#177;&#160;1.61 nats (better in 3/3 seeds), test average NLL from &#8722;0.095 to &#8722;0.173, while ADE/FDE and miss rate are statistically unchanged, and removing the topology leak costs &#8804;0.04&#160;m ADE. The result is a better-calibrated MTP-GO whose decoder needs no future information at inference time.</p>
+
+<p class="kw noindent">Index Terms&#8212;trajectory prediction, graph neural networks, mixture density networks, uncertainty calibration, neural ODEs.</p>
+
+<h2>I. Introduction</h2>
+<p class="noindent">Forecasting the joint motion of road users is a core competence of autonomous driving systems, and the field has converged on graph-based encoders that model agent interaction explicitly. MTP-GO&#160;[1] is a representative and influential design: a GRU cell whose gates are graph neural networks (GNNs) encodes the observed scene, a second GRU-GNN decodes into the inputs of a differentially-constrained motion model (a neural ODE&#160;[4]), and an extended-Kalman-filter (EKF) style covariance propagation turns the rollout into a Gaussian mixture over future trajectories. The design couples strong point accuracy with the ability to report usable uncertainty, and its evaluation on the highD/rounD/inD drone datasets&#160;[3] made it a common baseline.</p>
+<p>This note asks a simple question of the <i>decoder</i>: what does it actually know about the scene while it rolls the future out? A close reading of the reference implementation gives two surprising answers. First, the interaction graph used at future step <span>&#10218;t+k&#10219;</span> is the <i>ground-truth</i> future edge set&#8212;which agents are present and connected at a time that has, from the model&#8217;s point of view, not happened yet. This information is consumed at every one of the 25 decoding steps, in training and in evaluation alike, so published metrics quietly benefit from an oracle that no deployed system has. Second, and in tension with the paper&#8217;s emphasis on interaction modeling, the decoder GNN is constructed <i>without an edge-feature channel</i>: the precomputed future inter-agent distances are written to disk by preprocessing but never loaded by any model code. All decoder message passing is unweighted; only the encoder sees distances, through a Gaussian kernel with a learnable bandwidth.</p>
+<p>We contribute: (1)&#160;a precise statement of both defects in the notation of the original paper (Sec.&#160;III); (2)&#160;two minimal fixes&#8212;<i>dynamic decoder edges</i> and a <i>presence-agnostic full topology</i>&#8212;that make the decoder self-contained and deployable (Sec.&#160;IV); (3)&#160;a mechanistic hypothesis for <i>why</i> the fix should improve probabilistic calibration specifically, derived from the covariance-propagation path of the architecture (Sec.&#160;IV-C); and (4)&#160;a multi-seed empirical test on inD that confirms the hypothesis&#8212;a large, seed-consistent NLL improvement at unchanged displacement error&#8212;reported together with its honest null results (Sec.&#160;V&#8211;VI).</p>
+
+<h2>II. MTP-GO Preliminaries</h2>
+<p class="noindent">A traffic scene with agents <span>&#10218;\mathcal{V}&#10219;</span> is a sequence of graphs <span>&#10218;\mathcal{G}_t=(\mathcal{V}_t,\mathcal{E}_t)&#10219;</span>, complete over the agents present at time <span>&#10218;t&#10219;</span>. Node features are kinematic states; edges carry the Euclidean distance <span>&#10218;d_{ij,t}&#10219;</span> between agents. The encoder is a GRU whose gates are GNN layers; its message passing weights each edge by a Gaussian kernel with learnable bandwidth <span>&#10218;\beta&#10219;</span> (initialized at 20&#160;m),</p>
+<div class="eq"><span class="m">&#10218;w_{ij,t}=\exp(-d_{ij,t}^{2}/\beta^{2})&#10219;</span><span class="n">(1)</span></div>
+<p class="noindent">so that near agents exchange strong messages and far agents are suppressed smoothly. From the final encoder state, mixture logits <span>&#10218;\alpha_{i}&#10219;</span> define trajectory-level weights <span>&#10218;\pi_{i,m}&#10219;</span> over <span>&#10218;M&#10219;</span> modes, and the model outputs, for agent <span>&#10218;i&#10219;</span> and horizon step <span>&#10218;k&#10219;</span>, the mixture density</p>
+<div class="eq"><span class="m">&#10218;p(\mathbf{y}_{i,k}\mid\mathcal{G}_{1:t})=\sum_{m=1}^{M}\pi_{i,m}\,\mathcal{N}(\mathbf{y}_{i,k};\hat{\mathbf{x}}_{i,m,k},\mathbf{P}_{i,m,k})&#10219;</span><span class="n">(2)</span></div>
+<p class="noindent">The means come from a motion model rather than a free-form head: a decoder GRU-GNN produces control inputs <span>&#10218;\mathbf{u}_{i,m,k}&#10219;</span> for a second-order neural ODE,</p>
+<div class="eq"><span class="m">&#10218;\dot{\mathbf{p}}_{i}=\mathbf{v}_{i},\qquad\dot{\mathbf{v}}_{i}=f_{\theta}(\mathbf{x}_{i},\mathbf{u}_{i})&#10219;</span><span class="n">(3)</span></div>
+<p class="noindent">integrated with a fixed-step Runge&#8211;Kutta-4 scheme over each 0.2&#160;s step. The covariances are propagated EKF-style along the rollout,</p>
+<div class="eq"><span class="m">&#10218;\mathbf{P}_{k+1}=\mathbf{F}_{k}\mathbf{P}_{k}\mathbf{F}_{k}^{\top}+\mathbf{G}_{k}\,\mathbf{q}_{k}\,\mathbf{G}_{k}^{\top}&#10219;</span><span class="n">(4)</span></div>
+<p class="noindent">where <span>&#10218;\mathbf{F}_{k},\mathbf{G}_{k}&#10219;</span> are Jacobians of the motion model and, crucially for what follows, the process noise <span>&#10218;\mathbf{q}_{k}&#10219;</span> is <i>generated by the decoder GNN</i> at every step. Training minimizes the masked negative log-likelihood</p>
+<div class="eq"><span class="m">&#10218;\mathcal{L}=-\sum_{i,k}\;\log\;\sum_{m}\;\pi_{i,m}\,\mathcal{N}(\mathbf{y}_{i,k};\hat{\mathbf{x}}_{i,m,k},\mathbf{P}_{i,m,k})&#10219;</span><span class="n">(5)</span></div>
+<p class="noindent">under an objective schedule (winner-takes-all warm-up before the NLL phase) with teacher forcing annealed from probability 0.2 to 0 over the first half of training&#8212;i.e., scheduled sampling&#160;[6] is already present in the reference code. Fed-back states are detached, so no gradients flow through the rollout recursion.</p>
+
+<h2>III. What the Decoder Actually Sees</h2>
+<p class="noindent"><i>Finding 1 (future-topology leak).</i> At decoder step <span>&#10218;k&#10219;</span> the hidden state of agent <span>&#10218;i&#10219;</span> is updated by unweighted message passing over the <i>ground-truth</i> edge set of future time <span>&#10218;t+k&#10219;</span>:</p>
+<div class="eq"><span class="m">&#10218;\mathbf{h}_{i,k}=\Phi(\mathbf{h}_{i,k-1},\{\mathbf{h}_{j,k-1}:(j,i)\in\mathcal{E}_{t+k}^{\mathrm{gt}}\})&#10219;</span><span class="n">(6)</span></div>
+<p class="noindent">The edge set <span>&#10218;\mathcal{E}_{t+k}^{\mathrm{gt}}&#10219;</span> encodes which agents exist in the scene at future step <span>&#10218;t+k&#10219;</span>&#8212;information unavailable at inference in any deployed setting. Because graphs are complete over present agents, the leak is exactly <i>future presence</i>; it is used in training and evaluation alike, so reported benchmarks are internally consistent but not achievable by a causal system.</p>
+<p><i>Finding 2 (edge-blind decoder).</i> The decoder&#8217;s GRU-GNN cell is constructed with no edge-feature dimension. The distances that preprocessing computes for future frames are dead data, never loaded. Hence <span>&#10218;\Phi&#10219;</span> in (6) aggregates all present neighbors with <i>equal weight</i>, regardless of whether they are 2&#160;m or 80&#160;m away, and this blindness persists for the whole 5&#160;s horizon while the scene geometry evolves. The interaction graph the paper motivates is, during decoding, a presence indicator only.</p>
+<p>Three consequences follow. First, a protocol&#8211;deployment mismatch: published numbers are conditioned on an oracle a real system cannot query, and nothing in the evaluation quantifies what the oracle is worth&#8212;it could be propping up accuracy, calibration, both, or neither. Second, a modeling inconsistency: the architecture&#8217;s central claim is that interaction should be modeled <i>throughout</i> the prediction, yet interaction strength is frozen at its encoded summary the moment decoding begins, while agents may close or open tens of meters of separation within the horizon. Third, the preprocessing pipeline computes and stores future inter-agent distances that no model code ever reads&#8212;suggesting a decoder edge-feature path was intended but never wired in. Our modification can be read as completing that apparent intention, causally.</p>
+
+<h2>IV. Method</h2>
+<h3>A. Dynamic decoder edges</h3>
+<p class="noindent">We give the decoder the same distance-kernel machinery as the encoder, driven purely by its own predictions. At step <span>&#10218;k&#10219;</span>, each agent&#8217;s fed-back per-mode positions <span>&#10218;\hat{\mathbf{p}}_{i,m,k-1}&#10219;</span> are pooled with the (detached) mixture weights,</p>
+<div class="eq"><span class="m">&#10218;\bar{\mathbf{p}}_{i,k-1}=\sum_{m=1}^{M}\tilde{\pi}_{i,m}\,\hat{\mathbf{p}}_{i,m,k-1},\quad\tilde{\pi}_{i}=\mathrm{softmax}(\mathrm{sg}[\alpha_{i}])&#10219;</span><span class="n">(7)</span></div>
+<p class="noindent">where <span>&#10218;\mathrm{sg}[\cdot]&#10219;</span> is stop-gradient. Pairwise distances are recomputed from these pooled positions,</p>
+<div class="eq"><span class="m">&#10218;\hat{d}_{ij,k}=\|\bar{\mathbf{p}}_{i,k-1}-\bar{\mathbf{p}}_{j,k-1}\|_{2}&#10219;</span><span class="n">(8)</span></div>
+<p class="noindent">and enter the decoder cell (now built with an edge channel) through its own learnable Gaussian kernel,</p>
+<div class="eq"><span class="m">&#10218;\hat{w}_{ij,k}=\exp(-\hat{d}_{ij,k}^{2}/\beta_{\mathrm{dec}}^{2})&#10219;</span><span class="n">(9)</span></div>
+<p class="noindent">Two design decisions matter. <i>Causality:</i> distances at step <span>&#10218;k&#10219;</span> use positions from step <span>&#10218;k-1&#10219;</span>&#8212;everything the model knows when predicting step <span>&#10218;k&#10219;</span>; using the precomputed future distances would reintroduce a leak. <i>Gradient policy:</i> positions and mixture weights are detached, so the new path trains only the GNN weights and the bandwidth <span>&#10218;\beta_{\mathrm{dec}}&#10219;</span>, mirroring the detached state feedback of the original architecture and leaving its optimization dynamics untouched. Under teacher forcing the fed-back positions are ground truth for past-of-current-step states, exactly as for the state feedback itself. Training throughput cost is &#8776;25%.</p>
+<h3>B. Presence-agnostic topology</h3>
+<p class="noindent">To remove Finding&#160;1 we replace <span>&#10218;\mathcal{E}_{t+k}^{\mathrm{gt}}&#10219;</span> with the complete graph (with self-loops) over all agents observed in the sample,</p>
+<div class="eq"><span class="m">&#10218;\bar{\mathcal{E}}=\{(i,j):i,j\in\mathcal{V}\}&#10219;</span><span class="n">(10)</span></div>
+<p class="noindent">generated on the fly from the node count (verified byte-identical to the preprocessing files on 100/100 test samples). The decoder then uses <i>no</i> ground-truth future input of any kind; combined with Sec.&#160;IV-A the decoder is fully deployable.</p>
+<h3>C. Hypotheses: why this should help, and where</h3>
+<p class="noindent"><i>H1 (calibration, main effect).</i> The decoder GNN&#8217;s primary probabilistic output is the process noise <span>&#10218;\mathbf{q}_{k}&#10219;</span> in (4): step-wise covariance growth is a <i>function of the decoder&#8217;s message passing</i>. Interaction-driven uncertainty&#8212;a conflict partner approaching, a leader braking&#8212;is precisely the signal carried by evolving inter-agent distance. A decoder that sees <span>&#10218;\hat{d}_{ij,k}&#10219;</span> can modulate <span>&#10218;\mathbf{q}_{k}&#10219;</span> scene-adaptively; an edge-blind decoder must amortize one average noise schedule over all scenes. We therefore expect the gain to appear in NLL (which (5) ties directly to <span>&#10218;\mathbf{P}&#10219;</span>) rather than in ADE/FDE.</p>
+<p><i>H2 (phantom agents).</i> With the presence-agnostic topology (10), agents that have left the scene (or not yet entered it) keep exchanging messages. Only a distance-dependent weight (9) can drive such phantom contributions to zero, since <span>&#10218;\hat{w}_{ij,k}\rightarrow 0&#10219;</span> as <span>&#10218;\hat{d}_{ij,k}&#10219;</span> grows. Hence dynamic edges should recover most of the calibration lost when the ground-truth presence oracle is removed.</p>
+<p><i>H3 (point accuracy, expected null).</i> The mean trajectory is dominated by the motion-model integration of (3) from the encoder&#8217;s summary; on inD, agent behavior over 5&#160;s is largely determined by the observed kinematics. We expect displacement metrics to move little&#8212;and, correspondingly, that removing the presence oracle costs little ADE, i.e., that the leak was propping up calibration rather than accuracy.</p>
+
+<h2>V. Experiments</h2>
+<p class="noindent"><i>Setup.</i> We use the inD intersection dataset&#160;[3], recordings 18&#8211;29, preprocessed exactly as in&#160;[1]: 7,820 samples (6,159/741/920 train/val/test; the sample count matches the paper, confirming replication), 3&#160;s observation and 5&#160;s horizon at 5&#160;Hz. All runs use the repository defaults of&#160;[1]: second-order neural-ODE motion model, hidden size 64, one GNN layer, <span>&#10218;M=8&#10219;</span> mixtures, RK4, batch 128, Adam at <span>&#10218;10^{-4}&#10219;</span>, 200 epochs, the original objective schedule and annealed teacher forcing. The baseline reproduces the published per-class accuracy of MTP-GO on inD (aggregate test ADE/FDE 1.006/2.835&#160;m against published per-class ADE 0.42&#8211;1.27&#160;m). Metrics are most-likely-component ADE/FDE, average per-step NLL of the position marginal (ANLL), miss rate (final error &gt;&#8202;2&#160;m, &#8805;&#8202;4&#160;s horizon), and best validation NLL. Main comparisons use three seeds (1234, 1, 42) per variant on one RTX 5090 (&#8776;66&#160;min per baseline run).</p>
+
+<p><i>Main result: calibration improves, seed-consistently.</i> Table&#160;I compares the baseline decoder with dynamic edges (Sec.&#160;IV-A) over three seeds. Best validation NLL improves by 2.41 nats on average and in <i>every</i> seed; test ANLL improves in 2 of 3 seeds with a mean gain of 0.078 nats. Displacement metrics and miss rate are statistically unchanged: the paired differences (+0.005&#160;m ADE, +0.045&#160;m FDE) are an order of magnitude smaller than the seed spread of the baseline itself (ADE 0.983&#8211;1.049&#160;m). This is exactly the H1/H3 pattern. With <span>&#10218;n=3&#10219;</span> seeds the paired t-test on best validation NLL gives <span>&#10218;t=-2.5&#10219;</span> (<span>&#10218;p\approx 0.13&#10219;</span>); we report direction-consistency rather than claiming formal significance.</p>
+
+<div class="tabwrap"><p class="tabcap noindent"><span class="t">Table&#160;I</span>&#8212;Baseline vs. dynamic decoder edges on inD; mean&#160;&#177;&#160;std over seeds 1234/1/42 (identical splits). Bold: better mean.</p>
+<table>
+<thead>
+<tr><th class="l">Metric</th><th>Baseline</th><th>Dynamic edges</th></tr>
+</thead>
+<tbody>
+<tr><td class="l">test ADE (m)</td><td><b>1.013 &#177; 0.034</b></td><td>1.018 &#177; 0.038</td></tr>
+<tr><td class="l">test FDE (m)</td><td><b>2.852 &#177; 0.118</b></td><td>2.897 &#177; 0.118</td></tr>
+<tr><td class="l">test ANLL (nats)</td><td>&#8722;0.095 &#177; 0.018</td><td><b>&#8722;0.173 &#177; 0.064</b></td></tr>
+<tr><td class="l">miss rate</td><td>0.418 &#177; 0.030</td><td><b>0.405 &#177; 0.027</b></td></tr>
+<tr><td class="l">best val NLL (nats)</td><td>&#8722;0.61 &#177; 0.59</td><td><b>&#8722;3.02 &#177; 1.61</b></td></tr>
+<tr><td class="l">best val ADE (m)</td><td>1.003 &#177; 0.032</td><td><b>0.986 &#177; 0.028</b></td></tr>
+</tbody>
+</table></div>
+
+<div class="figure">
+<img src="fig1.svg" alt="Validation NLL curves and per-seed paired comparison"/>
+<p class="figcap noindent"><span class="t">Fig.&#160;1.</span>&#160;&#160;(a)&#160;Validation NLL on inD (seed 1234) for the four decoder variants; curves shown after the objective-schedule transition. (b)&#160;Best validation NLL per seed: dynamic edges improve calibration in 3 of 3 seeds (mean &#8722;2.41 nats).</p>
+</div>
+
+<p><i>Removing the leak.</i> Table&#160;II crosses topology (ground-truth vs. presence-agnostic) with edge features (none vs. dynamic) at seed 1234. Replacing the ground-truth future topology with the full graph costs at most 0.044&#160;m ADE and 0.143&#160;m FDE&#8212;at the edge of the &#177;0.03&#8211;0.12 seed band&#8212;so the published point metrics of&#160;[1] were essentially honest despite the oracle (H3 confirmed); the full-topology run even attains the best validation FDE of all runs (2.756&#160;m). Calibration, however, pays for the fix: best val NLL degrades from &#8722;1.27 to &#8722;0.67 without edge features. Adding dynamic edges recovers most of it (&#8722;1.69) and helps in <i>both</i> topology regimes (&#8722;1.27&#8594;&#8722;3.63 with the oracle; &#8722;0.67&#8594;&#8722;1.69 without), consistent with the phantom-agent mechanism H2: once presence is no longer oracle-filtered, only the distance kernel can silence departed agents.</p>
+
+<div class="tabwrap"><p class="tabcap noindent"><span class="t">Table&#160;II</span>&#8212;Topology &#215; edge features (seed 1234). <b class="run">full+dyn</b> is the deployable configuration: no ground-truth future input.</p>
+<table>
+<thead>
+<tr><th class="l">Decoder</th><th>ADE</th><th>FDE</th><th>ANLL</th><th>val NLL</th></tr>
+</thead>
+<tbody>
+<tr><td class="l">GT topo, no feat. (=&#8202;[1])</td><td>1.006</td><td>2.835</td><td>&#8722;0.108</td><td>&#8722;1.27</td></tr>
+<tr><td class="l">GT topo + dyn. edges</td><td>1.036</td><td>2.946</td><td><b>&#8722;0.197</b></td><td><b>&#8722;3.63</b></td></tr>
+<tr><td class="l">full topo, no feat.</td><td>1.048</td><td>2.968</td><td>&#8722;0.089</td><td>&#8722;0.67</td></tr>
+<tr><td class="l">full topo + dyn. edges</td><td>1.050</td><td>2.978</td><td>&#8722;0.131</td><td>&#8722;1.69</td></tr>
+</tbody>
+</table></div>
+
+<p><i>Secondary ablations.</i> Two single-seed ablations bound other free choices of&#160;[1] (Table&#160;III). The mixture count <span>&#10218;M=8&#10219;</span> is locally optimal on inD&#8212;both halving and doubling it hurt every metric&#8212;answering the natural &#8220;sweep <span>&#10218;M&#10219;</span>&#8221; critique with a negative result. The integrator, left unspecified in the paper text, is load-bearing: replacing RK4 with forward Euler in (3) degrades ADE by +51% and FDE by +37%, with validation error <i>diverging</i> after &#8776;50 epochs; the stiff-rollout accuracy of the motion model is a real dependency, not an implementation detail.</p>
+
+<div class="tabwrap"><p class="tabcap noindent"><span class="t">Table&#160;III</span>&#8212;Design ablations of&#160;[1] on inD (seed 1234, baseline decoder).</p>
+<table>
+<thead>
+<tr><th class="l">Variant</th><th>ADE</th><th>FDE</th><th>ANLL</th><th>MR</th></tr>
+</thead>
+<tbody>
+<tr><td class="l"><span>&#10218;M=8&#10219;</span>, RK4 (default)</td><td><b>1.006</b></td><td><b>2.835</b></td><td><b>&#8722;0.108</b></td><td><b>0.424</b></td></tr>
+<tr><td class="l"><span>&#10218;M=4&#10219;</span></td><td>1.096</td><td>3.073</td><td>+0.130</td><td>0.435</td></tr>
+<tr><td class="l"><span>&#10218;M=16&#10219;</span></td><td>1.067</td><td>3.023</td><td>&#8722;0.005</td><td>0.422</td></tr>
+<tr><td class="l">forward Euler</td><td>1.516</td><td>3.879</td><td>+1.007</td><td>0.594</td></tr>
+</tbody>
+</table></div>
+
+<p><i>Reproducibility.</i> Both modifications ship as flags whose default reproduces the original model bit-for-bit: <span style="font-family:'Liberation Mono','DejaVu Sans Mono',monospace;font-size:7.8pt">--dynamic-edges</span> and <span style="font-family:'Liberation Mono','DejaVu Sans Mono',monospace;font-size:7.8pt">--full-edges</span>. Because the flags change the parameter set (the decoder gains an edge channel and a bandwidth), checkpoint filenames are tagged (<b class="run">de</b>/<b class="run">fe</b>) so that baseline and variant weights can never cross-load silently. The full topology is generated from the sample&#8217;s node count at data-loading time rather than read from disk, adding no I/O and requiring no re-preprocessing of existing datasets. Inference overhead is one pairwise-distance computation per decoder step&#8212;negligible next to the GNN itself; the &#8776;25% overhead quoted in Sec.&#160;IV-A is training-time. All runs, per-seed metric histories, and trained weights accompany the code.</p>
+
+<h2>VI. Discussion: Did It Work?</h2>
+<p class="noindent">The hypotheses were stated before the multi-seed runs; all three held. <i>H1 held:</i> the improvement concentrates where the mechanism predicts&#8212;in the likelihood. The gain is large on validation NLL (2.4 nats, 3/3 seeds) and clear on test ANLL, and qualitative inspection shows scene-adaptive uncertainty ellipses where the baseline's grow monotonically. <i>H2 held:</i> without the presence oracle, dynamic edges improve validation NLL from &#8722;0.67 to &#8722;1.69 nats&#8212;more than undoing the loss from leak removal, ending better calibrated than the leaky baseline itself (&#8722;1.27). <i>H3 held:</i> point accuracy neither improved nor degraded beyond seed noise&#8212;we explicitly do not claim an ADE/FDE win, and single-seed deltas below &#8776;0.07&#160;m ADE on this benchmark should not be interpreted at all.</p>
+<p>In what sense is the modified model <i>better</i>? First, it is better calibrated: for downstream planning under uncertainty, the covariances&#8212;not the point estimates&#8212;are the interface, and (5) improves materially at &#8776;25% training overhead and negligible inference cost. Second, it is <i>deployable</i>: the <b class="run">full+dyn</b> configuration consumes no ground-truth future information, closing the gap between benchmark protocol and a causal system at a cost (&#8804;0.04&#160;m ADE) that is within seed noise. Third, the analysis itself corrects the record on what MTP-GO&#8217;s numbers mean: they were obtained with a future-presence oracle, and we show the oracle was calibration-relevant but not accuracy-relevant.</p>
+<p><i>When to adopt, and how far it travels.</i> For any consumer of the predicted distribution&#8212;planners that integrate collision probability, risk-aware behavior selection, conformal wrappers&#8212;the calibrated variant dominates: same means, materially better likelihood, no future inputs. For leaderboard-style point-accuracy comparison it is neutral, and we would not advertise it there. The mechanism, however, is not MTP-GO-specific: the argument in Sec.&#160;IV-C uses only two structural facts&#8212;that a rollout decoder does message passing over an interaction graph, and that its uncertainty parameters are produced by that same message passing. Any graph-based encoder&#8211;decoder with covariance propagation of the form (4) exposes the same lever, and the same two-line audit (does the decoder see future topology? does it see any edge features?) applies verbatim to other reference implementations.</p>
+<p><i>Limitations.</i> Three seeds support direction-consistency, not formal significance (<span>&#10218;p\approx 0.13&#10219;</span>); the NLL seed variance is high (one seed is an outlier in both variants). Results are for one intersection dataset; highway scenes (highD), where relative geometry changes by &#8776;150&#160;m per horizon, may respond differently on point accuracy&#8212;the mechanism predicts a larger effect there. The distance recomputation uses the mixture-pooled position, a single-point summary of a multimodal belief; per-mode graphs are a natural extension.</p>
+
+<h2>VII. Conclusion</h2>
+<p class="noindent">Reading MTP-GO&#8217;s decoder closely revealed that its interaction graph is part oracle (ground-truth future presence) and part inert (no edge features). Two minimal changes&#8212;recomputing distances from the model&#8217;s own rolling predictions through the existing learnable kernel, and a presence-agnostic topology&#8212;yield a decoder that is measurably better calibrated (&#8722;2.4 nats validation NLL, consistent across seeds), equally accurate, and free of future information at inference. The broader lesson is methodological: in encoder&#8211;decoder forecasting models, the decoder&#8217;s input contract deserves the same scrutiny as the loss and the architecture, because that is where benchmark protocol and deployment reality quietly diverge.</p>
+<p>Two extensions are immediate. Per-mode interaction graphs&#8212;computing (8) from each mixture component&#8217;s own position rather than the pooled mean&#8212;would let different maneuvers imply different interaction patterns, at <span>&#10218;M&#10219;</span> times the edge cost. And the highway setting is the natural stress test for H3: with &#8776;150&#160;m of travel per 5&#160;s horizon, the encoder&#8217;s frozen distance summary decays far faster than at an intersection, so dynamic edges may move displacement metrics there, not only the likelihood. Both are measurable with the released flags and require no new machinery.</p>
+
+<h2>References</h2>
+<div class="refs">
+<p>[1] T. Westny, J. Oskarsson, B. Olofsson, and E. Frisk, &#8220;MTP-GO: Graph-based probabilistic multi-agent trajectory prediction with neural ODEs,&#8221; <i>IEEE Trans. Intelligent Vehicles</i>, vol. 8, no. 9, pp. 4223&#8211;4236, 2023.</p>
+<p>[2] T. Westny, J. Oskarsson, B. Olofsson, and E. Frisk, &#8220;Evaluation of differentially constrained motion models for graph-based trajectory prediction,&#8221; in <i>Proc. IEEE Intelligent Vehicles Symp. (IV)</i>, 2023.</p>
+<p>[3] J. Bock, R. Krajewski, T. Moers, S. Runde, L. Vater, and L. Eckstein, &#8220;The inD dataset: A drone dataset of naturalistic road user trajectories at German intersections,&#8221; in <i>Proc. IEEE Intelligent Vehicles Symp. (IV)</i>, 2020.</p>
+<p>[4] R. T. Q. Chen, Y. Rubanova, J. Bettencourt, and D. Duvenaud, &#8220;Neural ordinary differential equations,&#8221; in <i>Adv. Neural Information Processing Systems (NeurIPS)</i>, 2018.</p>
+<p>[5] C. Morris, M. Ritzert, M. Fey, W. L. Hamilton, J. E. Lenssen, G. Rattan, and M. Grohe, &#8220;Weisfeiler and Leman go neural: Higher-order graph neural networks,&#8221; in <i>Proc. AAAI Conf. Artificial Intelligence</i>, 2019.</p>
+<p>[6] S. Bengio, O. Vinyals, N. Jaitly, and N. Shazeer, &#8220;Scheduled sampling for sequence prediction with recurrent neural networks,&#8221; in <i>Adv. Neural Information Processing Systems (NeurIPS)</i>, 2015.</p>
+<p>[7] C. Guo, G. Pleiss, Y. Sun, and K. Q. Weinberger, &#8220;On calibration of modern neural networks,&#8221; in <i>Proc. Int. Conf. Machine Learning (ICML)</i>, 2017.</p>
+</div>
+
+</div>
+</div>
