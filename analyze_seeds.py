@@ -12,7 +12,10 @@ import os
 import numpy as np
 from scipy import stats
 
+# chronological batches: pilot (3), extension (5), confirmation campaign (20)
 SEEDS8 = [1234, 1, 42, 7, 13, 99, 2024, 3407]
+SEEDS28 = SEEDS8 + [2, 3, 5, 11, 17, 23, 31, 37, 55, 77, 101, 123, 222,
+                    314, 555, 777, 888, 1000, 2718, 9999]
 SEEDS3 = [1234, 1, 42]
 
 # per-variant: (json name, log-dir glob) keyed by seed; 1234 = original runs
@@ -22,11 +25,11 @@ def named(prefix, tag, seed, orig_json, orig_glob):
     return (f"{prefix}_{tag}_S{seed}.json", f"logs/*_{tag}_S{seed}_*")
 
 VARIANTS = {
-    "baseline": (SEEDS8, lambda s: named(
+    "baseline": (SEEDS28, lambda s: named(
         "SecondOrderNeuralODE64G1InD", "BASE", s,
         "SecondOrderNeuralODE64G1InD.json",
         "logs/SecondOrderNeuralODE64G1InD_15-07*")),
-    "dynedge": (SEEDS8, lambda s: named(
+    "dynedge": (SEEDS28, lambda s: named(
         "SecondOrderNeuralODE64G1DEInD", "DYN", s,
         "SecondOrderNeuralODE64G1DEInD_DYNEDGE.json",
         "logs/*_DYNEDGE_*")),

@@ -1,0 +1,38 @@
+2026-07-17 — 28-seed confirmation: calibration effect was noise; paper rewritten
+=================================================================================
+
+WHAT WAS DONE
+40 more runs (20 new seeds x baseline/dynedge; seeds 2,3,5,11,17,23,31,37,55,
+77,101,123,222,314,555,777,888,1000,2718,9999) via seedruns/parent2.sh,
+~11 h wall in 4 streams, zero errors. Pre-planned n=28 fixed by power analysis
+of the 8-seed interim (d~0.54 -> 80% power); single test at planned n (no
+sequential peeking). analyze_seeds.py extended; make_figures.py produced 4
+graphics (results/figures/, SVG+PNG). Paper rebuilt (4 pages) + new Fig 2.
+
+VERDICT (results/seed_stats.json)
+- H1 REJECTED: best val NLL diff +0.23 nats [CI -0.97,+1.44], p=0.70, 14/28;
+  test ANLL +0.01, p=0.70. The -2.4-nat pilot effect regressed to zero
+  (evidence trajectory: -2.41 @n=3 -> -1.11 @n=8 -> +0.23 @n=28).
+- H3 CONFIRMED: ADE diff +0.010 m [CI -0.004,+0.023] - leak-free decoder is
+  accuracy-equivalent; MTP-GO's published numbers were honest despite leak.
+- Noise bands for this family: +/-0.04 m ADE, +/-0.1 nats test ANLL,
+  sigma 2.7-3.6 nats best val NLL (several seeds never calibrate, val NLL>0).
+- Recommendations flipped: --full-edges adopt (free, causal);
+  --dynamic-edges NOT default (no benefit, 25% cost, CI leans negative).
+- Paper retitled: "A Leak-Free Decoder for MTP-GO, and How Many Seeds a
+  Trajectory-Prediction Claim Really Needs: a 28-Seed Cautionary Study".
+  Abstract/results/discussion/conclusion rewritten around the null + the
+  deployability result. Fig 1b = 28-pair slopegraph; Fig 2 = evidence
+  trajectory with p at n=3/8/28.
+
+LESSONS / GOTCHAS
+- Winner's curse is the story: hypothesis-confirming pilot (3/3!) at n=3 can
+  be pure sampling noise at sigma~3 nats. Never trust <10-seed NLL claims.
+- min-over-epochs val NLL is a noisy order statistic; prefer fixed-epoch or
+  test-set metrics for future comparisons.
+- All 68 checkpoints remain on thunderlane saved_models/inD/.
+
+NEXT STEPS
+- Optional: highD study (mechanism most plausible there) - properly powered
+  from the start using the measured variance.
+- Optional: per-mode graphs; fixed-epoch calibration metric re-analysis.
